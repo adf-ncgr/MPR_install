@@ -130,5 +130,5 @@ for (i in 3:ncol(t)) {
     #write.table(O.cr)
     t[,i]<-O.cr
 }
-cat("#VERSION ;", " recomb=",opt$recomb, ", het=", opt$het, ", error=", opt$err, "\n");
+cat("#VERSION postprocessing_recombination_initial-2-ga552139-8;", " recomb=",opt$recomb, ", het=", opt$het, ", error=", opt$err, "\n");
 write.table(t, file="", sep="\t", quote=F, row.names = FALSE, col.names=TRUE)
