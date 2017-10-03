@@ -16,8 +16,11 @@ opt = parse_args(opt_parser);
 `makeMissingDataEmissionFUN` <-
 function (errorRate = 0.01) 
 {
+    #cost of getting it wrong
     E <- log(errorRate)
+    #cost of getting it right
     E2 <- log(1 - errorRate)
+    #cost of making successive HOM calls of the same kind when you are in HET region
     E3 <- log(0.5)
     #not sure what I was trying to accomplish with this!?
     #E3 <- log(0.75)
@@ -42,8 +45,31 @@ function (errorRate = 0.01)
             return(ifelse(h == x, E2, E))
     }
 }
-myTransitionFun <- function(fromState, toState, physicalDistance, lastRecombNobs) {
+myTransitionFun <- function(fromState, toState, physicalDistance, lastRecombDist) {
     d <- physicalDistance/(100000000000*100)
+    p <- (1 - exp(-2 * d))
+    p <- p/(1 + p)
+    #write(c("lastRecombNobs = ", lastRecombNobs), stderr())
+    if (lastRecombDist < opt$recomb) p <- 0
+    #p=0.000000001
+    ifelse(fromState == toState, 1 - p, p)
+}
+#equivalent to original version packaged with MPR, but arguments for being called in suppression context
+myTransitionFun2 <- function(fromState, toState, physicalDistance, lastRecombNobs) {
+    d <- physicalDistance/(._rice_phy2get_factor_ * 100)
+    #d <- physicalDistance/(100000000000*100)
+    p <- (1 - exp(-2 * d))
+    p <- p/(1 + p)
+    #write(c("lastRecombNobs = ", lastRecombNobs), stderr())
+    #if (lastRecombNobs < opt$recomb) p <- 0
+    #p=0.000000001
+    ifelse(fromState == toState, 1 - p, p)
+}
+#reinstitutes the key difference line proving that the behavior is caused by line
+#if (lastRecombNobs < opt$recomb) p <- 0
+myTransitionFun3 <- function(fromState, toState, physicalDistance, lastRecombNobs) {
+    d <- physicalDistance/(._rice_phy2get_factor_ * 100)
+    #d <- physicalDistance/(100000000000*100)
     p <- (1 - exp(-2 * d))
     p <- p/(1 + p)
     #write(c("lastRecombNobs = ", lastRecombNobs), stderr())
@@ -59,29 +85,39 @@ function (geno, position, geno.probability, transitionFUN = phy2get.haldane.rils
     n.state <- length(geno.probability)
     #psi.con tracks the number of consecutive observations since the last recombination
     psi <- delta <- psi.con <- matrix(0, nrow = n.state, ncol = n.obs)
+    psi.dist <- matrix(0, nrow = n.state, ncol = n.obs)
     n.con <- geno.cr <- numeric(n.obs)
+    n.dist <- numeric(n.obs)
     geno.dis <- abs(diff(position))
     n.con[1] <- 1
+    n.dist[1] <- 1
     g <- geno[1]
     for (i in 2:n.obs) {
         n.con[i] <- ifelse(geno[i] == g, n.con[i - 1] + 1, 1)
+        #augment consecutive obs counts used in emission prob with distances for transition prob
+        n.dist[i] <- ifelse(geno[i] == g, n.dist[i - 1] + geno.dis, 1)
         g <- geno[i]
     }
     for (i in 1:n.state) {
         delta[i, 1] <- log(geno.probability[i]) + emissionFUN(i, geno[1], n.con[1])
         psi.con[i,1] <- 1
+        psi.dist[i,1] <- 1
     }
     preProb <- numeric(n.state)
     for (t in 2:n.obs) {
         for (j in 1:n.state) {
             for (i in 1:n.state) preProb[i] <- delta[i, t - 1] + 
-                log(transitionFUN(i, j, geno.dis[t - 1], psi.con[j,t-1]))
+                #adf: extra arg is for myTransitionFun
+                log(transitionFUN(i, j, geno.dis[t - 1], psi.dist[j,t-1]))
+                #log(transitionFUN(i, j, geno.dis[t - 1]))
             psi[j, t] <- which.max(preProb)
             if (psi[j,t] == j) {
                 psi.con[j,t] = psi.con[j,t-1] + 1
+                psi.dist[j,t] = psi.dist[j,t-1] + geno.dis[t-1]
             }
             else {
                 psi.con[1:n.state,t] = 1
+                psi.dist[1:n.state,t] = 1
             }
             delta[j, t] <- max(preProb) + emissionFUN(j, geno[t], 
                 n.con[t])
@@ -104,6 +140,14 @@ for (i in 3:ncol(t)) {
     #O.cr <- hmm.vitFUN.rils(geno=O,position=O.pos,geno.probability=c(0.25, 0.25,0.50),transitionFUN =phy2get.haldane.rils, emissionFUN = makeMissingDataEmissionFUN(errorRate = 0.1))
     #O.cr <- hmm.vitFUN.rils(geno=O,position=O.pos,geno.probability=c(0.25, 0.25,0.50),transitionFUN =myTransitionFun, emissionFUN = makeMissingDataEmissionFUN(errorRate = 0.05))
     #this was working well except for the double-recombinant issue
+    #adf: this was the version we started with when examining the recombination pileup issue
+    #O.cr <- hmm.vitFUN.suppressQuickRecomb(geno=O,position=O.pos,geno.probability=c(opt$het/2, opt$het/2, opt$het),transitionFUN =myTransitionFun, emissionFUN = makeMissingDataEmissionFUN(errorRate = opt$err))
+    #adf: this was the earlier version we tested and found worked much better for the recombnation pileup issue
+    #O.cr <- hmm.vitFUN.rils(geno=O,position=O.pos,geno.probability=c(opt$het/2, opt$het/2, opt$het),emissionFUN = makeMissingDataEmissionFUN(errorRate = opt$err))
+    #adf: this users suppressQuickRecomb but not the special transition function: myTransitionFun; it produced results equivalent to not using suppressQuickRecomb at all.
+    #O.cr <- hmm.vitFUN.suppressQuickRecomb(geno=O,position=O.pos,geno.probability=c(opt$het/2, opt$het/2, opt$het),emissionFUN = makeMissingDataEmissionFUN(errorRate = opt$err))
+    #adf: as expected, this produces output identical to "theoldway" (because it is the old way)
+    #O.cr <- hmm.vitFUN.suppressQuickRecomb(geno=O,position=O.pos,geno.probability=c(opt$het/2, opt$het/2, opt$het),transitionFUN =myTransitionFun, emissionFUN = makeMissingDataEmissionFUN(errorRate = opt$err))
     O.cr <- hmm.vitFUN.suppressQuickRecomb(geno=O,position=O.pos,geno.probability=c(opt$het/2, opt$het/2, opt$het),transitionFUN =myTransitionFun, emissionFUN = makeMissingDataEmissionFUN(errorRate = opt$err))
     #write.table(O.cr)
     t[,i]<-O.cr
