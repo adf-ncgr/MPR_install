@@ -107,12 +107,13 @@ function (geno, position, geno.probability, transitionFUN = phy2get.haldane.rils
             new_g <- geno.cr[i]
             while (geno.cr[j] == new_g && j < n.obs) {j <- j+1}
             if (position[j] - position[i] < opt$recomb) {
+                #cat("correcting block from " , i , " to " , j, "which is also", position[i], "to", position[j], "going to fill with state", last_g, "\n")
                 geno.cr[i:j] <- last_g
             }
             else {
                 last_g = new_g;
             }
-            i <- j
+            i <- j-1
        }
        i<-i+1
     }
@@ -130,5 +131,5 @@ for (i in 3:ncol(t)) {
     #write.table(O.cr)
     t[,i]<-O.cr
 }
-cat("#VERSION postprocessing_recombination_initial-2-ga552139-8;", " recomb=",opt$recomb, ", het=", opt$het, ", error=", opt$err, "\n");
+cat("#VERSION postprocessing_recombination_initial-3-g205e7eb-9;", " recomb=",opt$recomb, ", het=", opt$het, ", error=", opt$err, "\n");
 write.table(t, file="", sep="\t", quote=F, row.names = FALSE, col.names=TRUE)
