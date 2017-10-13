@@ -12,7 +12,7 @@ my ($last_genotypes, $last_sequence, %recombinations, %line_recombinations, @las
 
 while (<>) {
     chomp;
-    my ($sequence, $genotypes) = /([^\t]*)\t(.*)/;
+    my ($sequence, $pos, $genotypes) = /([^\t]*)\t([^\t]*)\t(.*)/;
     $sequence =~ s/_\d+$//;
     if (!($sequence eq $last_sequence)) {
         $recombinations{$sequence} = 0;
@@ -20,6 +20,7 @@ while (<>) {
             $line_recombinations{$sequence}->{$headers[$i]} = 0;
         }
         @last_genotypes = split /\t/, $genotypes;
+        $last_genotypes = $genotypes;
     }
     elsif (!($genotypes eq $last_genotypes)) {
         $recombinations{$sequence}++;
