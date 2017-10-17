@@ -73,15 +73,27 @@ foreach my $g (keys %genotypes2contigs) {
 my @genotypes = keys %genotypes2contigs;
 #(@genotypes) = &convert_to_binary(@genotypes);
 my $threshold_distance = 2;
+my %min_dists;
 for (my $i = 0; $i < @genotypes; $i++) {
-    my $min_dist = ~0;
-    my @contigs = ();
+    #may have previously been compared in earlier rounds (when it was a j to some other i)
+    my @contigs;
+    my $min_dist = $min_dists{$genotypes[$i]}->{dist};
+    if (! defined $min_dist) {
+        $min_dist = ~0;
+        @contigs = ();
+    }
+    else {
+        @contigs = @{$min_dists{$genotypes[$i]}->{contigs}};
+    }
     for (my $j = $i+1; $j < @genotypes; $j++) {
         my $distance = &genotype_distance($genotypes[$i], $genotypes[$j]);
         if ($distance < $min_dist) {
             $min_dist = $distance;
             @contigs = ();
+            $min_dists{$genotypes[$i]}->{dist} = $min_dist;
+            $min_dists{$genotypes[$i]}->{contigs} = \@contigs;
         }
+        #this will kick in if the above conditional reset min_dist or if we happen to equal a previously set min_dist
         if ($distance == $min_dist) {
             push @contigs, keys %{$genotypes2contigs{$genotypes[$j]}};
         }
@@ -95,7 +107,6 @@ for (my $i = 0; $i < @genotypes; $i++) {
 }
 
 sub convert_to_binary() {
-    #return map {
         my ($genotypes) = @_;
         my @genotypes = split //, $genotypes;
         my $retval = '';
@@ -111,14 +122,10 @@ sub convert_to_binary() {
             }
         }
         return $retval;
-    #} @_;
 }
 
 sub genotype_distance() {
     my ($g1, $g2) = @_;
-    #my @bits = split(//, unpack("b*", ($g1^$g2)));
-    #my $distance = 0;
-    #map {$distance += $_;} @bits;
     my $bits = unpack("b*", ($g1^$g2));
     my $distance =()= $bits =~ /1/g;
     return $distance;
