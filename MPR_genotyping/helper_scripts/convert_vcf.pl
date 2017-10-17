@@ -8,11 +8,13 @@ my $assume_ref_diffs_are_parent2=0;
 my $rescue_sites_with_single_parent_coverage=0;
 my $coordinate_map;
 my $min_ns;
+my $min_dp;
 GetOptions(
     "parent=s" => \@parents,
     "rescue_sites_with_single_parent_coverage!" => \$rescue_sites_with_single_parent_coverage,
     "coordinate_map=s" => \$coordinate_map,
     "min_ns=i" => \$min_ns,
+    "min_dp=i" => \$min_dp,
 );
 if (@parents == 0) {
     #this implies ref is parent1
@@ -54,6 +56,12 @@ while (<>) {
     if (defined $min_ns) {
         my ($ns) = ($data[GT_START_IDX-2] =~ /NS=(\d+)/);
         if ($ns < $min_ns) {
+            next;
+        }
+    }
+    if (defined $min_dp) {
+        my ($dp) = ($data[GT_START_IDX-2] =~ /DP=(\d+)/);
+        if ($dp < $min_dp) {
             next;
         }
     }
