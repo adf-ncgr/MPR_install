@@ -50,6 +50,7 @@ while (<>) {
     $last_genotypes = $genotypes;
 }
 
+print "#VERSION;";
 print "#per-sequence recombination counts\n";
 print join("\n", map {$_."\t".$recombinations{$_};} sort {$recombinations{$b} <=> $recombinations{$a}} keys %recombinations);
 print "\n";
