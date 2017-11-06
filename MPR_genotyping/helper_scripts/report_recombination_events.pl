@@ -8,14 +8,17 @@ while ($header = <>) {
 chomp $header;
 my (undef, @headers) = split /\t/, $header;
 
-my ($last_genotypes, $last_sequence, %recombinations, %line_recombinations, @last_genotypes, $last_recombination_pos, %interrecomb_dists, %genotypes2contigs);
+my ($last_genotypes, $last_sequence, $last_pos, %recombinations, %line_recombinations, @last_genotypes, $last_recombination_pos, %interrecomb_dists, %genotypes2blocks, %blocks2markers, @block_marker_positions);
 
 while (<>) {
     chomp;
     my ($sequence, $pos, $genotypes) = /^([^\t]+)_(\d+)\t(.*)/;
     if (!($sequence eq $last_sequence)) {
         if (defined $last_sequence) {
-            $genotypes2contigs{&convert_to_binary($last_genotypes)}->{$last_sequence.":".$last_recombination_pos."-END"} = 1;
+            my $block = $last_sequence.":".$last_recombination_pos."-END";
+            $genotypes2blocks{&convert_to_binary($last_genotypes)}->{$block} = 1;
+            $blocks2markers{$block} = [$block_marker_positions[0], $block_marker_positions[$#block_marker_positions/2], $block_marker_positions[$#block_marker_positions]];
+            @block_marker_positions = ();
         }
         $recombinations{$sequence} = 0;
         $interrecomb_dists{$sequence} = [];
@@ -28,10 +31,16 @@ while (<>) {
     }
     elsif (!($genotypes eq $last_genotypes)) {
         if (!defined $last_recombination_pos) {
-            $genotypes2contigs{&convert_to_binary($last_genotypes)}->{$sequence.":BEGIN-".$pos} = 1;
+            my $block = $sequence.":BEGIN-".$last_pos;
+            $genotypes2blocks{&convert_to_binary($last_genotypes)}->{$block} = 1;
+            $blocks2markers{$block} = [$block_marker_positions[0], $block_marker_positions[$#block_marker_positions/2], $block_marker_positions[$#block_marker_positions]];
+            @block_marker_positions = ();
         }
         else {
-            $genotypes2contigs{&convert_to_binary($last_genotypes)}->{$sequence.":".$last_recombination_pos."-".$pos} = 1;
+            my $block = $sequence.":".$last_recombination_pos."-".$last_pos;
+            $genotypes2blocks{&convert_to_binary($last_genotypes)}->{$block} = 1;
+            $blocks2markers{$block} = [$block_marker_positions[0], $block_marker_positions[$#block_marker_positions/2], $block_marker_positions[$#block_marker_positions]];
+            @block_marker_positions = ();
         }
         #push @{$interrecomb_dists{$sequence}}, ($pos-$last_recombination_pos);
         #$last_recombination_pos = $pos;
@@ -48,9 +57,14 @@ while (<>) {
     }
     $last_sequence = $sequence;
     $last_genotypes = $genotypes;
+    $last_pos = $pos;
+    push @block_marker_positions, $pos;
 }
+my $block = $last_sequence.":".$last_recombination_pos."-END";
+$genotypes2blocks{&convert_to_binary($last_genotypes)}->{$block} = 1;
+$blocks2markers{$block} = [$block_marker_positions[0], $block_marker_positions[$#block_marker_positions/2], $block_marker_positions[$#block_marker_positions]];
 
-print "#VERSION;";
+print "#VERSION;\n";
 print "#per-sequence recombination counts\n";
 print join("\n", map {$_."\t".$recombinations{$_};} sort {$recombinations{$b} <=> $recombinations{$a}} keys %recombinations);
 print "\n";
@@ -63,48 +77,71 @@ foreach my $sequence (sort {$recombinations{$b} <=> $recombinations{$a}} keys %r
     print join("\t", $sequence, map {$line_recombinations{$sequence}->{$_};} @headers), "\n";
 }
 
+my %good_blocks;
 print "#suggested linkages\n";
-foreach my $g (keys %genotypes2contigs) {
-    my @contigs = keys %{$genotypes2contigs{$g}};
-    if (scalar(@contigs) > 1) {
-        print join("\t", @contigs), "\n";
+foreach my $g (keys %genotypes2blocks) {
+    my @blocks = keys %{$genotypes2blocks{$g}};
+    if (scalar(@blocks) > 1) {
+        print join("\t", @blocks), "\n";
+        #FIXME: maybe too naive- should look for presence of inter-contig blocks?
+        map {$good_blocks{$_} = 1;} @blocks;
     }
 }
 
-my @genotypes = keys %genotypes2contigs;
+my @genotypes = keys %genotypes2blocks;
 #(@genotypes) = &convert_to_binary(@genotypes);
 my $threshold_distance = 2;
 my %min_dists;
 for (my $i = 0; $i < @genotypes; $i++) {
     #may have previously been compared in earlier rounds (when it was a j to some other i)
-    my @contigs;
+    my @blocks;
     my $min_dist = $min_dists{$genotypes[$i]}->{dist};
     if (! defined $min_dist) {
         $min_dist = ~0;
-        @contigs = ();
+        @blocks = ();
     }
     else {
-        @contigs = @{$min_dists{$genotypes[$i]}->{contigs}};
+        @blocks = @{$min_dists{$genotypes[$i]}->{blocks}};
     }
     for (my $j = $i+1; $j < @genotypes; $j++) {
         my $distance = &genotype_distance($genotypes[$i], $genotypes[$j]);
         if ($distance < $min_dist) {
             $min_dist = $distance;
-            @contigs = ();
+            @blocks = ();
             $min_dists{$genotypes[$i]}->{dist} = $min_dist;
-            $min_dists{$genotypes[$i]}->{contigs} = \@contigs;
+            $min_dists{$genotypes[$i]}->{blocks} = \@blocks;
         }
         #this will kick in if the above conditional reset min_dist or if we happen to equal a previously set min_dist
         if ($distance == $min_dist) {
-            push @contigs, keys %{$genotypes2contigs{$genotypes[$j]}};
+            push @blocks, keys %{$genotypes2blocks{$genotypes[$j]}};
         }
         if ($distance <= $threshold_distance) {
-            print "at distance $distance: " . join(",", keys %{$genotypes2contigs{$genotypes[$i]}}) . " with " . join(",", keys %{$genotypes2contigs{$genotypes[$j]}}) . "\n";
+            print "at distance $distance: " . join(",", keys %{$genotypes2blocks{$genotypes[$i]}}) . " with " . join(",", keys %{$genotypes2blocks{$genotypes[$j]}}) . "\n";
+            map {$good_blocks{$_} = 1;} keys %{$genotypes2blocks{$genotypes[$i]}};
+            map {$good_blocks{$_} = 1;} keys %{$genotypes2blocks{$genotypes[$j]}};
         }
     }
-    print "min_dist=$min_dist for ".join(",", keys %{$genotypes2contigs{$genotypes[$i]}})
-        .  " " . ($min_dist > $threshold_distance ? join(",", @contigs) : "")
+    print "min_dist=$min_dist for ".join(",", keys %{$genotypes2blocks{$genotypes[$i]}})
+        .  " " . ($min_dist > $threshold_distance ? join(",", @blocks) : "")
         ."\n";
+}
+
+print "#good markers\n";
+print $header,"\n";
+foreach my $genotype (keys %genotypes2blocks) {
+    my $genotype_string;
+    foreach $block (keys %{$genotypes2blocks{$genotype}}) {
+        next unless $good_blocks{$block};
+        if (! defined $genotype_string) {
+            $genotype_string = substr(&convert_from_binary($genotype),0,scalar(@headers));
+            $genotype_string = join("\t", split(//, $genotype_string));
+        }
+        my ($contig) = ($block =~ /^([^:]+)/);
+        my $genotypes = $block;
+        for (my $i = 0; $i < 3; $i++) {
+            print "${contig}_$blocks2markers{$block}->[$i]\t$genotype_string\n";
+        }
+    }
 }
 
 sub convert_to_binary() {
@@ -125,9 +162,21 @@ sub convert_to_binary() {
         return $retval;
 }
 
+sub convert_from_binary() {
+    my ($genotypes) = @_;
+    my @genotype_codes = ("A", "H", "H", "B");
+    my @bits = split(//, unpack("b*", $genotypes));
+    my $retval = "";
+    for (my $i = 0; $i < @bits; $i += 4) {
+        $retval .= $genotype_codes[oct("0b".join("", $bits[$i], $bits[$i+1]))];
+    }
+    return $retval;
+}
+
 sub genotype_distance() {
     my ($g1, $g2) = @_;
-    my $bits = unpack("b*", ($g1^$g2));
-    my $distance =()= $bits =~ /1/g;
+    #my $bits = unpack("b*", ($g1^$g2));
+    #my $distance =()= $bits =~ /1/g;
+    my $distance = unpack("%32b*", ($g1^$g2));
     return $distance;
 }
