@@ -5,7 +5,9 @@ my $correction_output = shift;
 open(C, $correction_output) || die $!;
 #for now, we can assume the files can be read in parallel (ie rows and columns are consistent between the two, modulo some missing headers and non-essential columns)
 #skip head
-<C>;
+while (<C>) {
+    last if /^CHROM_POS/;
+}
 
 use constant GT_START_IDX => 9;
 while (my $c_gt = <C>) {
