@@ -99,23 +99,55 @@ function (geno, position, geno.probability, transitionFUN = phy2get.haldane.rils
     for (t in seq(n.obs - 1, 1, by = -1)) geno.cr[t] <- psi[geno.cr[t + 
         1], t + 1]
 
-    i<-1
-    last_g <- geno.cr[i];
+    #initial block: not sure if we should test this one, given that
+    #being at the edge we don't really know its true extent.
+    i <- 1
+    prev_g <- geno.cr[i]
+    prev_block_start_idx <- i
+    while (geno.cr[i] == prev_g && i <= n.obs) {i <- i+1}
+    prev_block_size = position[i-1] - position[prev_block_start_idx] + 1;
+    #iterate through subsequent blocks, if any is below the size limit then 
+    #we will subsume into the neighboring block that is largest
     while (i <= n.obs) {
-       if (geno.cr[i] != last_g) {
-            j <- i
-            new_g <- geno.cr[i]
-            while (geno.cr[j] == new_g && j < n.obs) {j <- j+1}
-            if (position[j] - position[i] < opt$recomb) {
-                #cat("correcting block from " , i , " to " , j, "which is also", position[i], "to", position[j], "going to fill with state", last_g, "\n")
-                geno.cr[i:j] <- last_g
-            }
-            else {
-                last_g = new_g;
-            }
-            i <- j-1
+       this_g <- geno.cr[i]
+       this_block_start_idx <- i
+       while (geno.cr[i] == this_g && i < n.obs) {i <- i+1}
+       if (i == n.obs) { break }
+       this_block_size = position[i-1] - position[this_block_start_idx] + 1;
+       if (this_block_size < opt$recomb) {
+           next_g <- geno.cr[i]
+           next_block_start_idx <- i
+           while (geno.cr[i] == next_g && i < n.obs) {i <- i+1}
+           next_block_size = position[i-1] - position[next_block_start_idx] + 1;
+           #in this case, the current block becomes a part of both, ie they
+           #are all fused into a single block
+           if (next_g == prev_g) {
+               #cat("this_block was small and between like neighbors: ", position[this_block_start_idx],"-",position[next_block_start_idx-1]," with prev_g=",prev_g," and next_g=",next_g,"\n")
+               geno.cr[this_block_start_idx:next_block_start_idx-1] <- prev_g
+               prev_block_size <- prev_block_size + this_block_size + next_block_size;
+               #we can leave i as it is to become the next this_block
+           }
+           else {
+               #we need to choose which one we will join; this is a greedy local approach
+               if (prev_block_size >= next_block_size) {
+                   #cat("this_block was small and between unlike neighbors, prev block wins: ", position[this_block_start_idx],"-",position[next_block_start_idx-1],"\n")
+                   geno.cr[this_block_start_idx:next_block_start_idx-1] <- prev_g
+                   prev_block_size = prev_block_size + this_block_size
+                   #now move on to make next_block this_block
+                   i <- next_block_start_idx
+               }
+               else {
+                   #cat("this_block was small and between unlike neighbors, next block wins: ", position[this_block_start_idx],"-",position[next_block_start_idx-1],"\n")
+                   geno.cr[this_block_start_idx:next_block_start_idx-1] <- next_g
+                   #we don't actually know yet that the current block has exceeded the min size limit, so we'll just set up to test it again
+                   i <- this_block_start_idx
+               }
+           }
        }
-       i<-i+1
+       else {
+           prev_block_start_idx = this_block_start_idx;
+           prev_block_size = this_block_size;
+       }
     }
     geno.cr
 }
@@ -126,10 +158,11 @@ t<-read.table("stdin", header=T, check.names=F)
 O.pos<-t[,2]
 for (i in 3:ncol(t)) {
 #for (i in 3:4) {
+    #cat("now on ", names(t)[i], "\n")
     O<-t[,i]
     O.cr <- hmm.vitFUN.suppressQuickRecomb(geno=O,position=O.pos,geno.probability=c(opt$het/2, opt$het/2, opt$het),transitionFUN =myTransitionFun, emissionFUN = makeMissingDataEmissionFUN(errorRate = opt$err))
     #write.table(O.cr)
     t[,i]<-O.cr
 }
-cat("#VERSION postprocessing_recombination_initial-3-g205e7eb-9;", " recomb=",opt$recomb, ", het=", opt$het, ", error=", opt$err, "\n");
+cat("#VERSION postprocessing_recombination_initial-13-gd0c5127-19;", " recomb=",opt$recomb, ", het=", opt$het, ", error=", opt$err, "\n");
 write.table(t, file="", sep="\t", quote=F, row.names = FALSE, col.names=TRUE)
