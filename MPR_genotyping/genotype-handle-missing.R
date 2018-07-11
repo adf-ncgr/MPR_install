@@ -7,6 +7,8 @@ option_list = list(
             help="probability of heterozygous genotype", metavar="0 <= x <= 1"),
     make_option(c("--err"), type="double", default=0.01, dest="err",
             help="probability of genotype error", metavar="0 <= x <= 1"),
+    make_option(c("--noisy_het_err"), type="double", default=0.01, dest="noisy_het_err",
+            help="probability of noisy het genotype error", metavar="0 <= x <= 1"),
     make_option(c("--recomb"), type="integer", default=100, dest="recomb",
             help="number of observations from last recombination until another recombination event is allowed", metavar="positive integer")
 );
@@ -14,10 +16,12 @@ opt_parser = OptionParser(option_list=option_list);
 opt = parse_args(opt_parser);
 
 `makeMissingDataEmissionFUN` <-
-function (errorRate = 0.01) 
+function (errorRate = 0.01, noisyHetError = 0.01) 
 {
     #cost of getting it wrong
     E <- log(errorRate)
+    #cost of calling a HET when it ought to be HOM (sometimes this case might need special handling to help out in messy calling contexts)
+    E4 <- log(noisyHetError)
     #cost of getting it right
     E2 <- log(1 - errorRate)
     #cost of making successive HOM calls of the same kind when you are in HET region
@@ -26,6 +30,8 @@ function (errorRate = 0.01)
     function(h, x, n) {
         if (h == 3 && (x == 1 || x == 2)) 
             return(n * E3)
+        else if (x == 3 && (h == 1 || h == 2))
+            return(E4)
         else if (x == 0) 
             return(E3)
         else 
@@ -42,7 +48,7 @@ myTransitionFun <- function(fromState, toState, physicalDistance, lastRecombDist
 
 `hmm.vitFUN.suppressQuickRecomb` <-
 function (geno, position, geno.probability, transitionFUN = phy2get.haldane.rils, 
-    emissionFUN = makeEmissionFUN(errorRate = 0.01), ...) 
+    emissionFUN = makeEmissionFUN(errorRate = 0.01, noisyHetError = 0.01), ...) 
 {
     n.obs <- length(geno)
     n.state <- length(geno.probability)
@@ -160,9 +166,9 @@ for (i in 3:ncol(t)) {
 #for (i in 3:4) {
     #cat("now on ", names(t)[i], "\n")
     O<-t[,i]
-    O.cr <- hmm.vitFUN.suppressQuickRecomb(geno=O,position=O.pos,geno.probability=c(opt$het/2, opt$het/2, opt$het),transitionFUN =myTransitionFun, emissionFUN = makeMissingDataEmissionFUN(errorRate = opt$err))
+    O.cr <- hmm.vitFUN.suppressQuickRecomb(geno=O,position=O.pos,geno.probability=c(opt$het/2, opt$het/2, opt$het),transitionFUN =myTransitionFun, emissionFUN = makeMissingDataEmissionFUN(errorRate = opt$err, noisyHetError = opt$noisy_het_err))
     #write.table(O.cr)
     t[,i]<-O.cr
 }
-cat("#VERSION postprocessing_recombination_initial-13-gd0c5127-19;", " recomb=",opt$recomb, ", het=", opt$het, ", error=", opt$err, "\n");
+cat("#VERSION postprocessing_recombination_initial-17-g8146899-23;", " recomb=",opt$recomb, ", het=", opt$het, ", error=", opt$err, ", noisyHetError=", opt$nois_het_err, "\n");
 write.table(t, file="", sep="\t", quote=F, row.names = FALSE, col.names=TRUE)
