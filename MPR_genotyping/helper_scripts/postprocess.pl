@@ -1,9 +1,14 @@
 #!/usr/bin/env perl
+#use strict;
+use Getopt::Long;
+
 my @headers;
 my $count=0;
 my @genotypes;
-#FIXME: parameterize
 my $min_block_size = 50000;
+GetOptions(
+    "min_block_size=i" => \$min_block_size,
+);
 my $chr;
 while (<>) {
     print && next if /^#/;
