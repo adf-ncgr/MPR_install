@@ -29,10 +29,12 @@ while (<>) {
     }
 }
 
+#process each sample's genotype blocks in turn
 for (my $i=0; $i < @genotypes; $i++) {
     my %blocks;
     my $gtype = $genotypes[$i]->[0];
     my $prev_block_id;
+    #coalesce repeated genotype values into blocks
     for (my $j=0; $j < @{$genotypes[$i]}; $j++) {
         my $start_block = $j;
         while ($genotypes[$i]->[$j] == $gtype) {
@@ -53,6 +55,7 @@ for (my $i=0; $i < @genotypes; $i++) {
         $prev_block_id = $block_id;
         $j--;
     }
+
     my $look_again = 1;
     while ($look_again) {
         #TODO: should I throw an error if no block initially exceeds the min size? 
