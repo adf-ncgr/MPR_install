@@ -64,7 +64,7 @@ my $block = $last_sequence.":".$last_recombination_pos."-END";
 $genotypes2blocks{&convert_to_binary($last_genotypes)}->{$block} = 1;
 $blocks2markers{$block} = [$block_marker_positions[0], $block_marker_positions[$#block_marker_positions/2], $block_marker_positions[$#block_marker_positions]];
 
-print "#VERSION;\n";
+print "#VERSION postprocessing_recombination_initial-20-g99ff0e4-26;\n";
 print "#per-sequence recombination counts\n";
 print join("\n", map {$_."\t".$recombinations{$_};} sort {$recombinations{$b} <=> $recombinations{$a}} keys %recombinations);
 print "\n";
@@ -138,9 +138,11 @@ foreach my $genotype (keys %genotypes2blocks) {
         }
         my ($contig) = ($block =~ /^([^:]+)/);
         my $genotypes = $block;
-        for (my $i = 0; $i < 3; $i++) {
-            print "${contig}_$blocks2markers{$block}->[$i]\t$genotype_string\n";
-        }
+        ##I think this was based on a request from Joe Curley, but I don't think her cares anymore so changing it
+        #for (my $i = 0; $i < 3; $i++) {
+            #print "${contig}_$blocks2markers{$block}->[$i]\t$genotype_string\n";
+        #}
+        print "${contig}_${block}\t$genotype_string\n";
     }
 }
 
